@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
@@ -13,19 +14,15 @@ import (
 	"google.golang.org/api/option"
 )
 
-func main() {
+func Chart(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 	keyJson := os.Getenv("KEY_JSON")
-	if keyJson == "" {
-		fmt.Println("There's no KEY_JSON.")
-		return
-	} else {
-		fmt.Println("KEY_JSON: OK")
-	}
+
 	svc, err := monitoring.NewService(ctx, option.WithCredentialsJSON([]byte(keyJson)))
 	if err != nil {
-		fmt.Println("Failed to create Service.")
+		fmt.Printf("Failed to create service. %v", err)
 	}
+
 	projectID := "junior-engineers-gym-2023"
 	filter := `metric.type="compute.googleapis.com/instance/cpu/utilization"`
 
@@ -70,4 +67,9 @@ func main() {
 		return
 	}
 	page.Render(f)
+}
+
+func main() {
+	http.HandleFunc("/", Chart)
+	http.ListenAndServe(":8080", nil)
 }
