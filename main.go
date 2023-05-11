@@ -6,7 +6,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/wcharczuk/go-chart"
+	"github.com/go-echarts/go-echarts/v2/charts"
+	"github.com/go-echarts/go-echarts/v2/components"
+	"github.com/go-echarts/go-echarts/v2/opts"
 	"google.golang.org/api/monitoring/v3"
 	"google.golang.org/api/option"
 )
@@ -26,31 +28,46 @@ func main() {
 	}
 	projectID := "junior-engineers-gym-2023"
 	filter := `metric.type="compute.googleapis.com/instance/cpu/utilization"`
-	startTime := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339)
-	endTime := time.Now().UTC().Format(time.RFC3339)
+
+	location, _ := time.LoadLocation("Asia/Tokyo")
+	now := time.Now().In(location)
+	startTime := now.Add(-3 * time.Hour).Format(time.RFC3339)
+	endTime := now.Format(time.RFC3339)
 	res, err := svc.Projects.TimeSeries.List("projects/" + projectID).Filter(filter).IntervalStartTime(startTime).IntervalEndTime(endTime).Do()
 	if err != nil {
 		fmt.Printf("Could not execute request: %v", err)
 	}
 
-	var values []chart.Value
+	var timeList []string
+	var valueList []opts.LineData
 	for _, ts := range res.TimeSeries {
 		for _, point := range ts.Points {
-			value := *point.Value.DoubleValue
-			timeStamp := point.Interval.EndTime
-			t, _ := time.Parse(time.RFC3339, timeStamp)
-			values = append(values, chart.Value{Value: value, Label: t.Format(time.RFC3339)})
+			if point.Value.DoubleValue != nil {
+				value := *point.Value.DoubleValue
+				timeStamp := point.Interval.EndTime
+				t, _ := time.Parse(time.RFC3339, timeStamp)
+				timeList = append(timeList, t.In(location).Format(time.RFC3339))
+				valueList = append(valueList, opts.LineData{Value: value})
+			}
 		}
 	}
 
-	// Create a new chart.
-	graph := chart.BarChart{
-		Title: "CPU Utilization",
-		Bars:  values,
-	}
+	line := charts.NewLine()
+	line.SetGlobalOptions(
+		charts.WithTitleOpts(opts.Title{
+			Title: "CPU Utilization",
+		}),
+	)
+	line.SetXAxis(timeList).
+		AddSeries("Series1", valueList)
 
-	// Save the chart to a file.
-	f, _ := os.Create("output.png")
-	defer f.Close()
-	graph.Render(chart.PNG, f)
+	page := components.NewPage()
+	page.AddCharts(line)
+
+	f, err := os.Create("output.html")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	page.Render(f)
 }
